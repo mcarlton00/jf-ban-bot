@@ -45,7 +45,6 @@ class discord_thread(threading.Thread):
     '''
     @tasks.loop(seconds=5)
     async def check_queue(self):
-        #print('checking user queue')
         if not user_queue.empty():
             user = user_queue.get()
             # Clear username of bridge boilerplate
