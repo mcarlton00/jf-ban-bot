@@ -154,9 +154,10 @@ if __name__ == '__main__':
     ban_terms = data['ban_terms']
     ban_list = ban_terms.split(',')
 
-    # matrix_bot config, uncomment to join new rooms
+    # Determine if bot will accept room invites
+    accept_invites = data['accept_invites']
     matrix_config = botlib.Config()
-    # matrix_config.join_on_invite = True
+    matrix_config.join_on_invite = accept_invites
 
     '''
     Copied from https://github.com/i10b/simplematrixbotlib/issues/73#issuecomment-969416145  # noqa:E501
