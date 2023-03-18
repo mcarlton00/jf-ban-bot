@@ -1,3 +1,3 @@
 simplematrixbotlib
-discordpy
+discord.py
 requests
