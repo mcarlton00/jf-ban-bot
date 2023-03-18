@@ -206,4 +206,3 @@ if __name__ == '__main__':
                     json=redact_payload, headers=headers)
 
     matrix_bot.run()
-    #discord.join()
