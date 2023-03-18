@@ -1,12 +1,13 @@
-import requests
-import simplematrixbotlib as botlib
-import threading
-import queue
-from discord.ext import tasks
-import asyncio
-from fernet_wrapper import Wrapper as fw
 import time
 import configparser
+import asyncio
+import threading
+import queue
+
+import requests
+import simplematrixbotlib as botlib
+from discord.ext import tasks
+from fernet_wrapper import Wrapper as fw
 
 
 class discord_thread(threading.Thread):
