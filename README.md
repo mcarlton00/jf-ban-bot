@@ -6,7 +6,7 @@ Will automatically ban users and remove messages who violate the configured ban 
 
 ### Discord Bot
 
-Follow the directions from discordpy to set up a bot account.  When generating the invite URL, be sure to select the "bot" and "Ban Members" permissions.
+Follow the directions from discordpy to set up a bot account.  When generating the invite URL, be sure to select the "bot" permission, followed by "Ban Members" and "Moderate Members".  It also needs the "Server Members Intent" permission to look up users.
 
 https://discordpy.readthedocs.io/en/stable/discord.html
 
