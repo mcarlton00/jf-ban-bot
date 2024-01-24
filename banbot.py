@@ -49,7 +49,7 @@ class discord_thread(threading.Thread):
         if not user_queue.empty():
             user = user_queue.get()
             # Clear username of bridge boilerplate
-            user_id = user.replace('@_discord_', '').replace(':t2bot.io', '')
+            user_id = user.replace('@jfdiscord_', '').replace(':im.jellyfin.org', '')  # noqa: E501
             '''
             Get the server id.  It's only connected to the jellyfin server,
             so no filtering is needed
@@ -183,7 +183,7 @@ if __name__ == '__main__':
             if term in contents:
                 sender = message.sender
                 print(f'Found {term} in message, banning user {sender}')
-                if '@_discord_' in sender:
+                if '@jfdiscord_' in sender:
                     # If the sender is a discord user, ban in other thread
                     user_queue.put(sender)
                     '''
