@@ -10,6 +10,24 @@ from discord.ext import tasks
 from fernet_wrapper import Wrapper as fw
 
 
+def check_sender(homeserver, headers, sender):
+    '''
+    Check if the message sender is a member of Jellyfin Super Friends
+    '''
+
+    # Check membership of Jellyfin Super Friends room
+    r = requests.get(f'{homeserver}/_matrix/client/v3/rooms/!IcxAyGVzujeflEJlQt:matrix.org/joined_members', headers=headers)
+
+    # Formatted user list
+    members = r.json().get('joined', {})
+    member_names = list(members.keys())
+
+    if sender in member_names:
+        return True
+    else:
+        return False
+
+
 class discord_thread(threading.Thread):
 
     def __init__(self, discord_token):
@@ -20,7 +38,7 @@ class discord_thread(threading.Thread):
     def run(self):
         '''
         discordpy doesn't like being in it's own thread, need the import to
-        inside the thread
+        happen inside the thread
         '''
         import discord
 
@@ -182,6 +200,11 @@ if __name__ == '__main__':
         for term in ban_list:
             if term in contents:
                 sender = message.sender
+                mod_check = check_sender(homeserver, headers, sender)
+                # If the user is a member of Jellyfin Super Friends, don't ban
+                if mod_check:
+                    break
+
                 print(f'Found {term} in message, banning user {sender}')
                 if '@jfdiscord_' in sender:
                     # If the sender is a discord user, ban in other thread
@@ -206,4 +229,8 @@ if __name__ == '__main__':
                     f'{homeserver}/_matrix/client/v3/rooms/{room_id}/redact/{event_id}/{trans_id}',  # noqa:E501
                     json=redact_payload, headers=headers)
 
+                break
+
     matrix_bot.run()
+
+
