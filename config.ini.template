@@ -5,4 +5,5 @@ matrix_user = @my_bot:matrix.org
 matrix_password = supersecretpassword
 # Comma separated list
 ban_terms = https://t.me/
+ban_names = slurs,banned_servers
 accept_invites = True

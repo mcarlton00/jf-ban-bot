@@ -4,6 +4,7 @@ import asyncio
 import threading
 import queue
 
+import nio
 import requests
 import simplematrixbotlib as botlib
 from discord.ext import tasks
@@ -169,8 +170,10 @@ if __name__ == '__main__':
     matrix_pass = data['matrix_password']
 
     # Retrieve list of auto ban terms, split into list
-    ban_terms = data['ban_terms']
-    ban_list = ban_terms.split(',')
+    message_ban_terms = data['ban_terms']
+    message_ban_list = message_ban_terms.split(',')
+    name_ban_terms = data['ban_names']
+    name_ban_list = name_ban_terms.split(',')
 
     # Determine if bot will accept room invites
     accept_invites = data['accept_invites']
@@ -197,7 +200,7 @@ if __name__ == '__main__':
         contents = message.body
 
         # Check each entry from our auto ban list
-        for term in ban_list:
+        for term in message_ban_list:
             if term in contents:
                 sender = message.sender
                 mod_check = check_sender(homeserver, headers, sender)
@@ -231,6 +234,16 @@ if __name__ == '__main__':
 
                 break
 
+    @matrix_bot.listener.on_custom_event(nio.RoomMemberEvent)
+    async def new_user(room, event):
+        # Only trigger when users join a room
+        if event.membership == 'join':
+            sender = event.sender
+            # Loop through the list of banned username terms
+            for term in name_ban_list:
+                if term in sender:
+                    # Ban user if found
+                    print(f'Banning user {sender} for violating name rules')
+                    ban_matrix(homeserver, headers, matrix_user, sender)
+
     matrix_bot.run()
-
-
