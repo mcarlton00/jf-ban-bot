@@ -3,30 +3,14 @@ import configparser
 import asyncio
 import threading
 import queue
+import random
+import string
 
 import nio
 import requests
 import simplematrixbotlib as botlib
 from discord.ext import tasks
 from fernet_wrapper import Wrapper as fw
-
-
-def check_sender(homeserver, headers, sender):
-    '''
-    Check if the message sender is a member of Jellyfin Super Friends
-    '''
-
-    # Check membership of Jellyfin Super Friends room
-    r = requests.get(f'{homeserver}/_matrix/client/v3/rooms/!IcxAyGVzujeflEJlQt:matrix.org/joined_members', headers=headers)
-
-    # Formatted user list
-    members = r.json().get('joined', {})
-    member_names = list(members.keys())
-
-    if sender in member_names:
-        return True
-    else:
-        return False
 
 
 class discord_thread(threading.Thread):
@@ -79,18 +63,28 @@ class discord_thread(threading.Thread):
             await member.ban()
 
 
-def ban_matrix(homeserver, headers, admin_user, ban_user):
-
+def get_matrix_rooms(homeserver, headers):
     # Get a list of all rooms the bot is joined to
     r = requests.get(f'{homeserver}/_matrix/client/v3/joined_rooms',
                      headers=headers)
     joined_rooms = r.json().get('joined_rooms', [])
 
+    return joined_rooms
+
+
+def ban_matrix(homeserver, headers, admin_user, ban_user, ban_reason=None):
+
+    # Default ban reason
+    if not ban_reason:
+        ban_reason = 'Triggered deny list'
+
+    joined_rooms = get_matrix_rooms(homeserver, headers)
+
     # Try to ban user from all joined rooms.  Will fail if not modded
     for room in joined_rooms:
         ban_payload = {
             'user_id': ban_user,
-            'reason': 'triggered deny list'
+            'reason': ban_reason
         }
         # Ban the user from the room
         # https://spec.matrix.org/v1.3/client-server-api/#post_matrixclientv3roomsroomidban  # noqa: E501
@@ -103,7 +97,11 @@ def ban_matrix(homeserver, headers, admin_user, ban_user):
             print(f'failed to ban from {room}')
 
 
-def kick_matrix(homeserver, headers, admin_user, ban_user):
+def kick_matrix(homeserver, headers, admin_user, ban_user, ban_reason=None):
+
+    # Default ban reason
+    if not ban_reason:
+        ban_reason = 'Triggered deny list'
 
     # Get a list of all rooms the bot is joined to
     r = requests.get(f'{homeserver}/_matrix/client/v3/joined_rooms',
@@ -114,7 +112,7 @@ def kick_matrix(homeserver, headers, admin_user, ban_user):
     for room in joined_rooms:
         kick_payload = {
             'user_id': ban_user,
-            'reason': 'triggered deny list'
+            'reason': ban_reason
         }
         # Kick the user from the room
         # https://matrix.org/docs/api/#post-/_matrix/client/v3/rooms/-roomId-/kick  # noqa: E501
@@ -125,6 +123,41 @@ def kick_matrix(homeserver, headers, admin_user, ban_user):
             r.raise_for_status()
         except:
             print(f'failed to ban from {room}')
+
+
+def delete_user_messages(homeserver, headers, admin_user, ban_user, room_id):
+    letters = string.ascii_letters
+
+    # Retrieve previous events in the room
+    # https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3roomsroomidmessages
+    num_events = 50
+    r2 = requests.get(
+        f'{homeserver}/_matrix/client/v3/rooms/{room_id}/messages?limit={num_events}&dir=b',
+        headers=headers)
+
+    events = r2.json().get('chunk', [])
+    for event in events:
+        # If the user has posted any messages, delete them
+        if event.get('sender') == ban_user and event.get('type') == 'm.room.message':
+            event_id = event.get('event_id')
+            # generate random transaction id
+            trans_id = ''.join(random.choice(letters) for _ in range(20))
+            redact_payload = {'reason': 'nuked'}
+            # https://spec.matrix.org/v1.3/client-server-api/#redactions
+            requests.put(
+                f'{homeserver}/_matrix/client/v3/rooms/{room_id}/redact/{event_id}/{trans_id}',
+                json=redact_payload, headers=headers)
+
+
+def process_user_rooms(homeserver, headers, admin_user, ban_user, room):
+
+    # Process the room that this was called from first
+    delete_user_messages(homeserver, headers, admin_user, ban_user, room.room_id)
+
+    joined_rooms = get_matrix_rooms(homeserver, headers)
+
+    for room in joined_rooms:
+        delete_user_messages(homeserver, headers, admin_user, ban_user, room)
 
 
 # Copied from https://github.com/i10b/simplematrixbotlib/issues/73#issuecomment-969416145  # noqa: E501
@@ -195,6 +228,13 @@ if __name__ == '__main__':
     matrix_access_token = loop.run_until_complete(initialSync(matrix_bot))  # noqa:E501
     headers = {'Authorization': f'Bearer {matrix_access_token}'}
 
+    # Get membership of Jellyfin Super Friends room
+    r = requests.get(f'{homeserver}/_matrix/client/v3/rooms/!IcxAyGVzujeflEJlQt:matrix.org/joined_members', headers=headers)
+
+    # Formatted user list
+    members = r.json().get('joined', {})
+    mod_users = list(members.keys())
+
     @matrix_bot.listener.on_message_event
     async def auto_ban(room, message):
         contents = message.body
@@ -203,9 +243,7 @@ if __name__ == '__main__':
         for term in message_ban_list:
             if term in contents:
                 sender = message.sender
-                mod_check = check_sender(homeserver, headers, sender)
-                # If the user is a member of Jellyfin Super Friends, don't ban
-                if mod_check:
+                if sender in mod_users:
                     break
 
                 print(f'Found {term} in message, banning user {sender}')
@@ -228,7 +266,7 @@ if __name__ == '__main__':
                 event_id = message.event_id
                 trans_id = time.time()
                 redact_payload = {'reason': 'triggered deny list'}
-                delete = requests.put(
+                requests.put(
                     f'{homeserver}/_matrix/client/v3/rooms/{room_id}/redact/{event_id}/{trans_id}',  # noqa:E501
                     json=redact_payload, headers=headers)
 
@@ -245,5 +283,36 @@ if __name__ == '__main__':
                     # Ban user if found
                     print(f'Banning user {sender} for violating name rules')
                     ban_matrix(homeserver, headers, matrix_user, sender)
+
+    @matrix_bot.listener.on_message_event
+    async def nuke(room, message):
+        match = botlib.MessageMatch(room, message, matrix_bot, '!')
+
+        if match.is_not_from_this_bot() and match.prefix() and match.command('nuke'):
+            sender = match.event.sender
+            # check if message sender is in Jellyfin Super Friends
+            if sender in mod_users:
+                ban_user = match.event.source['content'].get('m.mentions', {}).get('user_ids', [])
+                if ban_user:
+                    # event gives us a list of user ids, we need a string
+                    ban_user = ban_user[0]
+
+                # If the target user is a member of Jellyfin Super Friends, don't ban
+                if ban_user not in mod_users:
+                    print(f'Nuking user {ban_user}')
+                    if '@jfdiscord_' in ban_user:
+                        # If the sender is a discord user, ban in other thread
+                        user_queue.put(ban_user)
+                        '''
+                        Then kick them from matrix so they don't show up in
+                        the member list anymore
+                        '''
+                        kick_matrix(homeserver, headers, matrix_user, ban_user, 'Nuked')
+                    else:
+                        # If the sender is a matrix user, ban through matrix api
+                        ban_matrix(homeserver, headers, matrix_user, ban_user, 'Nuked')
+
+                    print(f'User {ban_user} has been banned, deleting messages')
+                    process_user_rooms(homeserver, headers, matrix_user, ban_user, room)
 
     matrix_bot.run()
