@@ -6,6 +6,9 @@ import queue
 import random
 import string
 import re
+import json
+
+from urllib.parse import quote_plus, urlencode
 
 import nio
 import requests
@@ -133,8 +136,17 @@ def delete_user_messages(homeserver, headers, admin_user, ban_user, room_id):
     # Retrieve previous events in the room
     # https://spec.matrix.org/v1.3/client-server-api/#get_matrixclientv3roomsroomidmessages
     num_events = 50
+    payload_dict = {
+        'limit': num_events,
+        'dir': 'b'
+    }
+    payload = urlencode(payload_dict)
+    # Ugly way to get this filter field formatted correctly, but we only want message events
+    message_filter = {'types': ['m.room.message']}
+    encoded_filter = quote_plus(json.dumps(message_filter))
+
     r2 = requests.get(
-        f'{homeserver}/_matrix/client/v3/rooms/{room_id}/messages?limit={num_events}&dir=b',
+        f'{homeserver}/_matrix/client/v3/rooms/{room_id}/messages?{payload}&filter={encoded_filter}',
         headers=headers)
 
     events = r2.json().get('chunk', [])
