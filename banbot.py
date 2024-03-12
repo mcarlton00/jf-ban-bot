@@ -5,6 +5,7 @@ import threading
 import queue
 import random
 import string
+import re
 
 import nio
 import requests
@@ -160,6 +161,31 @@ def process_user_rooms(homeserver, headers, admin_user, ban_user, room):
         delete_user_messages(homeserver, headers, admin_user, ban_user, room)
 
 
+def find_ban_user(message):
+    '''
+    Parses the message to find the username to be banned
+    '''
+    # Tries to pull it from the mentions for easy matching
+    ban_user = message.event.source['content'].get('m.mentions', {}).get('user_ids', [])
+
+    if ban_user:
+        # The mentions return a list, we need a string
+        print('Found ban user in mentions')
+        ban_user = ban_user[0]
+    else:
+        # If the user isn't in the mentions, parse the formatted body for the name
+        # Matches a pattern of "<a href=\"https://foo.bar/#/@BAN_USER:HOMESERVER.TLD\">display name</a>"
+        body = message.event.formatted_body
+        regex_match = re.search('https://.*\..*/(.*)\\"', body)
+        if regex_match:
+            ban_user = regex_match.group(1)
+            print('Found ban user in body')
+        else:
+            print(f'Unable to find ban user in {body}')
+
+    return ban_user
+
+
 # Copied from https://github.com/i10b/simplematrixbotlib/issues/73#issuecomment-969416145  # noqa: E501
 class TokenCreds(botlib.Creds):
     def __init__(self, homeserver, username=None, password=None, login_token=None, access_token=None, session_stored_file='session.txt', device_name='banbot'):  # noqa: #501
@@ -290,12 +316,11 @@ if __name__ == '__main__':
 
         if match.is_not_from_this_bot() and match.prefix() and match.command('nuke'):
             sender = match.event.sender
+            print(f'Nuke called by {sender}')
             # check if message sender is in Jellyfin Super Friends
             if sender in mod_users:
-                ban_user = match.event.source['content'].get('m.mentions', {}).get('user_ids', [])
-                if ban_user:
-                    # event gives us a list of user ids, we need a string
-                    ban_user = ban_user[0]
+                print(f'{sender} is a mod, continuing')
+                ban_user = find_ban_user(match)
 
                 # If the target user is a member of Jellyfin Super Friends, don't ban
                 if ban_user not in mod_users:
@@ -314,5 +339,9 @@ if __name__ == '__main__':
 
                     print(f'User {ban_user} has been banned, deleting messages')
                     process_user_rooms(homeserver, headers, matrix_user, ban_user, room)
+                else:
+                    print(f'Target user {ban_user} is a mod, cancelling nuke')
+            else:
+                print(f'Sender {sender} is not a mod, cancelling nuke')
 
     matrix_bot.run()
