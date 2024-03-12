@@ -12,6 +12,7 @@ import requests
 import simplematrixbotlib as botlib
 from discord.ext import tasks
 from fernet_wrapper import Wrapper as fw
+from expiringdict import ExpiringDict
 
 
 class discord_thread(threading.Thread):
@@ -262,6 +263,9 @@ if __name__ == '__main__':
     members = r.json().get('joined', {})
     mod_users = list(members.keys())
 
+    # Create a dictionary that automatically cleans it's keys after 30 seconds
+    image_cache = ExpiringDict(max_len=100, max_age_seconds=30)
+
     @matrix_bot.listener.on_message_event
     async def auto_ban(room, message):
         contents = message.body
@@ -344,5 +348,38 @@ if __name__ == '__main__':
                     print(f'Target user {ban_user} is a mod, cancelling nuke')
             else:
                 print(f'Sender {sender} is not a mod, cancelling nuke')
+
+    @matrix_bot.listener.on_custom_event(nio.RoomMessageMedia)
+    async def new_message_media(room, event):
+        '''
+        Triggers when a new image/sound/media source is posted to a room
+        '''
+        sender = event.sender
+        # Check how many pictures this sender has already sent, increment by 1
+        count = image_cache.get(sender, 0)
+        count += 1
+        print(f'{sender} has sent {count} images in the last 30 seconds')
+        # If the user has sent more than 5 images in 30 seconds, ban and delete messages
+        if count > 7:
+            if sender not in mod_users:
+                print(f'Nuking user {sender} for image spam')
+                if '@jfdiscord_' in sender:
+                    # If the sender is a discord user, ban in other thread
+                    user_queue.put(sender)
+                    '''
+                    Then kick them from matrix so they don't show up in
+                    the member list anymore
+                    '''
+                    kick_matrix(homeserver, headers, matrix_user, sender, 'Nuked')
+                else:
+                    # If the sender is a matrix user, ban through matrix api
+                    ban_matrix(homeserver, headers, matrix_user, sender, 'Nuked')
+
+                print(f'User {sender} has been banned, deleting messages')
+                process_user_rooms(homeserver, headers, matrix_user, sender, room)
+            elif ban_user:
+                print(f'Target user {sender} is a mod, cancelling nuke')
+        else:
+            image_cache[sender] = count
 
     matrix_bot.run()
