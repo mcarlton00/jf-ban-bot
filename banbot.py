@@ -182,6 +182,7 @@ def find_ban_user(message):
             print('Found ban user in body')
         else:
             print(f'Unable to find ban user in {body}')
+            ban_user = ""
 
     return ban_user
 
@@ -323,7 +324,7 @@ if __name__ == '__main__':
                 ban_user = find_ban_user(match)
 
                 # If the target user is a member of Jellyfin Super Friends, don't ban
-                if ban_user not in mod_users:
+                if ban_user and ban_user not in mod_users:
                     print(f'Nuking user {ban_user}')
                     if '@jfdiscord_' in ban_user:
                         # If the sender is a discord user, ban in other thread
@@ -339,7 +340,7 @@ if __name__ == '__main__':
 
                     print(f'User {ban_user} has been banned, deleting messages')
                     process_user_rooms(homeserver, headers, matrix_user, ban_user, room)
-                else:
+                elif ban_user:
                     print(f'Target user {ban_user} is a mod, cancelling nuke')
             else:
                 print(f'Sender {sender} is not a mod, cancelling nuke')
