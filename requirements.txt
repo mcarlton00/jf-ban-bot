@@ -1,3 +1,4 @@
 simplematrixbotlib
 discord.py
 requests
+expiringdict
