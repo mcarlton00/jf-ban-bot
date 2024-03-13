@@ -389,7 +389,7 @@ if __name__ == '__main__':
 
                 print(f'User {sender} has been banned, deleting messages')
                 process_user_rooms(homeserver, headers, matrix_user, sender, room)
-            elif ban_user:
+            elif sender:
                 print(f'Target user {sender} is a mod, cancelling nuke')
         else:
             image_cache[sender] = count
